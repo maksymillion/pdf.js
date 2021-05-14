@@ -81,6 +81,7 @@ import { Toolbar } from "./toolbar.js";
 import { viewerCompatibilityParams } from "./viewer_compatibility.js";
 import { ViewHistory } from "./view_history.js";
 
+const IGNORE_SAME_ORIGIN_CHECK = true;
 const DEFAULT_SCALE_DELTA = 1.1;
 const DISABLE_AUTO_FETCH_LOADING_BAR_TIMEOUT = 5000; // ms
 const FORCE_PAGES_LOADED_TIMEOUT = 10000; // ms
@@ -950,6 +951,7 @@ const PDFViewerApplication = {
           key = "unexpected_response_error";
         }
         return this.l10n.get(key).then(msg => {
+          this._publishErrorToParent(key, exception, msg);
           this._documentError(msg, { message: exception?.message });
           throw exception;
         });
@@ -1042,6 +1044,18 @@ const PDFViewerApplication = {
         }
         this.download({ sourceEventType: "download" });
       });
+  },
+
+  /**
+   * Send the error to the parent window when in embed mode
+   */
+  _publishErrorToParent(key, exception, message) {
+    if (this.isViewerEmbedded) {
+      window.top.postMessage(
+        { type: "pdf-js:viewer:error", data: { key, exception, message } },
+        window.origin
+      );
+    }
   },
 
   /**
@@ -1515,8 +1529,8 @@ const PDFViewerApplication = {
     // Provides some basic debug information
     console.log(
       `PDF ${pdfDocument.fingerprint} [${info.PDFFormatVersion} ` +
-        `${(info.Producer || "-").trim()} / ${(info.Creator || "-").trim()}] ` +
-        `(PDF.js: ${version || "-"})`
+      `${(info.Producer || "-").trim()} / ${(info.Creator || "-").trim()}] ` +
+      `(PDF.js: ${version || "-"})`
     );
 
     let pdfTitle = info?.Title;
@@ -2119,7 +2133,7 @@ if (typeof PDFJSDev === "undefined" || PDFJSDev.test("GENERIC")) {
       // IE10 / IE11 does not include an origin in `blob:`-URLs. So don't block
       // any blob:-URL. The browser's same-origin policy will block requests to
       // blob:-URLs from other origins, so this is safe.
-      if (origin !== viewerOrigin && protocol !== "blob:") {
+      if (!IGNORE_SAME_ORIGIN_CHECK && origin !== viewerOrigin && protocol !== "blob:") {
         throw new Error("file origin does not match viewer's");
       }
     } catch (ex) {
@@ -2626,11 +2640,11 @@ function webViewerUpdateFindMatchesCount({ matchesCount }) {
 }
 
 function webViewerUpdateFindControlState({
-  state,
-  previous,
-  matchesCount,
-  rawQuery,
-}) {
+                                           state,
+                                           previous,
+                                           matchesCount,
+                                           rawQuery,
+                                         }) {
   if (PDFViewerApplication.supportsIntegratedFind) {
     PDFViewerApplication.externalServices.updateFindControlState({
       result: state,

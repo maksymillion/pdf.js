@@ -2,6 +2,7 @@
 local.mk
 build/
 tags
+.idea/
 .DS_Store
 Makefile
 node_modules/
